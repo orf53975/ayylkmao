@@ -36,7 +36,7 @@ file
 ```
 
 #### Phoning Home
-To phone home you'll first need a reverse shell that accepts arguments [like this one](https://github.com/ableiten/simple-reverse-shell). It should be placed on the infected system at `MAGIC_PREFIX-util/rev` where the rootkit knows to look for it.
+To phone home you will need a reverse shell that accepts arguments in a format of `./shell <ip> <port>`([like this one](https://github.com/ableiten/simple-reverse-shell)). The tool should be saved on the infected system as `MAGIC_PREFIX-util/rev` where the rootkit knows to look for it.
 
 After that you can simply send specially formatted data over any connection and a root reverse shell will phone home to the specified address and port.
 
