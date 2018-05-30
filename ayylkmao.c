@@ -136,7 +136,6 @@ asmlinkage int intercepted_getdents(unsigned int fd, struct linux_dirent __user 
         bpos += current_dir->d_reclen;
     }
     copy_to_user(dirp, kdir, ret);
-
     kfree(kdir);
     return ret;
 }
@@ -180,7 +179,6 @@ asmlinkage int intercepted_getdents64(unsigned int fd, struct linux_dirent64 __u
         bpos += current_dir->d_reclen;
     }
     copy_to_user(dirp, kdir, ret);
-    
     kfree(kdir);
     return ret;
 }
