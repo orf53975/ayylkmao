@@ -255,6 +255,7 @@ asmlinkage ssize_t intercepted_read(int fd, void __user *buf, size_t count)
     void *kbuf = kmalloc(ret, GFP_KERNEL);
     if (kbuf == NULL)
         return ret;
+    
     if (copy_from_user(kbuf, buf, ret) != 0) {
         kfree(kbuf);
         return ret;
