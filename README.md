@@ -14,8 +14,8 @@ That's all. You can install the `ayylkmao.ko` module normally.
 ## Basic Usage
 The magic kill signals are all defined as macros in [ayylkmao.c](https://github.com/ableiten/ayylkmao/blob/master/ayylkmao.c#L11). It is recommended that you modify these.
 
-#### Hiding Processes
-You can hide processes using the signals `SIGNAL_HIDE_PROCESS` and `SIGNAL_SHOW_PROCESS`.
+#### Hiding/Unhiding Processes
+You can hide and unhide processes using the signals `SIGNAL_HIDE_PROCESS` and `SIGNAL_SHOW_PROCESS`.
 
 ```
 > pidof python
