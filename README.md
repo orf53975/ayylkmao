@@ -67,7 +67,7 @@ Since the kernel module is hidden and thus unremovable by default, you will need
 ```
 
 ## Useful Material
-- [Every](https://github.com/jiayy/lkm-rootkit) [single](https://github.com/croemheld/lkm-rootkit) [other](https://github.com/m0nad/Diamorphine) [LKM](https://github.com/triedal/rootkit) [rootkit](https://github.com/nurupo/rootkit/) (Each word is a seperate link)
+- [A](https://github.com/jiayy/lkm-rootkit) [bunch](https://github.com/croemheld/lkm-rootkit) [of](https://github.com/QuokkaLight/rkduck) [other](https://github.com/m0nad/Diamorphine) [LKM](https://github.com/triedal/rootkit) [rootkits](https://github.com/nurupo/rootkit/) (Each word is a seperate link)
 - http://phrack.org/issues/58/7.html
 - http://www.ouah.org/LKM_HACKING.html (mirror, original unavailable as of writing)
 - http://r00tkit.me/
