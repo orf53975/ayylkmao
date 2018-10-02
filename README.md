@@ -59,7 +59,7 @@ root
 ```
 
 #### Removal
-Since the kernel module is hidden and thus unremovable by default, you will need to unhid before it can be removed. To do this simply signal any process with `SIGNAL_UNHIDE_MODULE` and then you should be able to remove the module normally.
+Since the kernel module is hidden and thus unremovable by default, you will need to unhide it before it can be removed. To do this simply signal any process with `SIGNAL_UNHIDE_MODULE` and then you should be able to remove the module normally.
 
 ```
 > kill -53 0
